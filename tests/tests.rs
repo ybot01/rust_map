@@ -60,12 +60,28 @@ fn test_remove_if(){
 
 #[test]
 fn test_get_min_key(){
-
+    let mut map = get_new_map();
+    let mut array = [0;32];
+    map.insert(&array, 0);
+    array[array.len()-1] = 1;
+    map.insert(&array, 0);
+    map.insert(&[u8::MAX;32], 0);
+    assert_eq!(map.get_min_key(&ByteArrayTreeSet::new()), Some([0;32]));
+    map.remove(&[0; 32]);
+    assert_eq!(map.get_min_key(&ByteArrayTreeSet::new()), Some(array));
 }
 
 #[test]
 fn test_get_max_key(){
-
+    let mut map = get_new_map();
+    let mut array = [u8::MAX;32];
+    map.insert(&array, 0);
+    array[array.len()-1] = u8::MAX - 1;
+    map.insert(&array, 0);
+    map.insert(&[0;32], 0);
+    assert_eq!(map.get_max_key(&ByteArrayTreeSet::new()), Some([u8::MAX;32]));
+    map.remove(&[u8::MAX; 32]);
+    assert_eq!(map.get_max_key(&ByteArrayTreeSet::new()), Some(array));
 }
 
 #[test]
