@@ -10,8 +10,8 @@ panic = "abort"
 strip = "symbols"
 
 [[bench]]
-name = "benchmarks"  # <--- This MUST match your file name exactly (benchmarks.rs)
-harness = false      # <--- This is the crucial line you are missing!
+name = "benchmarks"
+harness = false
 
 [dev-dependencies]
 rand = { version = "0.10.2", features = ["chacha"] }
