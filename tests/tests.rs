@@ -1,13 +1,111 @@
-/*use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{LazyLock, RwLock};
-use std::time::{Duration, SystemTime};
-use rand::random;
-use rand::distr::{Distribution, StandardUniform};
-use tokio::task::JoinHandle;
-use rand::random_range;
-use rust_map::InsertOrUpdateResult;
+use rust_map::{ByteArrayTreeMap, ByteArrayTreeSet};
 
-fn should_update<T: Ord>(value_1: &T, value_2: &T) -> bool{
+const fn get_new_map() -> ByteArrayTreeMap<32, u64> {ByteArrayTreeMap::new()}
+
+#[test]
+fn test_new_map(){
+    let map = get_new_map();
+    assert_eq!(map, ByteArrayTreeMap::Leaf(None));
+}
+
+#[test]
+fn test_insert(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    map.insert(&[0;32], 0);
+    map.insert(&[0;32], 1);
+    map.insert(&[1;32], 1);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 2);
+}
+
+#[test]
+fn test_get(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    map.insert(&[1;32], 1);
+    assert_eq!(map.get(&[0;32]), Some(&0));
+    assert_eq!(map.get(&[1;32]), Some(&1));
+}
+
+#[test]
+fn test_insert_or_update_if(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    map.insert_or_update_if(&[0;32], 1, &|v| 1 < *v);
+    assert_eq!(map.get(&[0;32]), Some(&0));
+}
+
+#[test]
+fn test_remove(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    map.insert(&[1;32], 1);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 2);
+    map.remove(&[0;32]);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    map.remove(&[1;32]);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+}
+
+#[test]
+fn test_remove_if(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    map.remove_if(&[0;32], &|v| *v == 1);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    map.remove_if(&[0;32], &|v| *v == 0);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+}
+
+#[test]
+fn test_get_min_key(){
+
+}
+
+#[test]
+fn test_get_max_key(){
+
+}
+
+#[test]
+fn test_max_depth(){
+    let mut map = get_new_map();
+    assert_eq!(map.max_depth(), 0);
+    let mut array = [0;32];
+    map.insert(&array, 0);
+    array[array.len()-1] = 1;
+    map.insert(&array, 0);
+    assert_eq!(map.max_depth(), 256);
+    map = get_new_map();
+    map.insert(&[0;32], 0);
+    map.insert(&[u8::MAX; 32], 0);
+    assert_eq!(map.max_depth(), 1);
+}
+
+#[test]
+fn test_highest_shared_leading_zeroes_by_key(){
+
+}
+
+#[test]
+fn test_closest_by_abs_distance_by_key(){
+
+}
+
+#[test]
+fn test_clear(){
+    let mut map = get_new_map();
+    map.insert(&[0;32], 0);
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    map.clear();
+    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+}
+
+
+
+
+/*fn should_update<T: Ord>(value_1: &T, value_2: &T) -> bool{
     value_2 > value_1
 }
 

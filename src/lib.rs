@@ -3,6 +3,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum ByteArrayTreeMap<const N: usize, V>{
     Branch([Box<ByteArrayTreeMap<N, V>>; 2]),
     Leaf(Option<([u8;N], V)>)
@@ -61,6 +62,14 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn contains(&self, key: &[u8; N]) -> bool {self._contains(key, 0)}
 
+    pub /*const*/ fn entries(&self, exclude: &ByteArrayTreeSet<N>) -> u64{
+        match self{
+            Self::Branch(branch) => branch.iter().map(|x| x.entries(exclude)).sum(),
+            Self::Leaf(None) => 0,
+            Self::Leaf(Some(_)) => 1
+        }
+    }
+
     pub /*const*/ fn get_min_key(&self, exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         match self{
             Self::Branch(branch) => branch.iter().find_map(|x| x.get_min_key(exclude)),
@@ -75,11 +84,10 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
         }
     }
 
-    pub /*const*/ fn max_depth(&self, exclude: &ByteArrayTreeSet<N>) -> u64 {
+    pub /*const*/ fn max_depth(&self) -> u64 {
         match self{
-            Self::Branch(branch) => 1 + branch.iter().map(|x| x.max_depth(exclude)).max().unwrap_or_default(),
-            Self::Leaf(None) => 0,
-            Self::Leaf(Some((k,_))) => if !exclude.contains(k) {1} else {0}
+            Self::Branch(branch) => 1 + branch.iter().map(|x| x.max_depth()).max().unwrap_or_default(),
+            Self::Leaf(_) => 0,
         }
     }
 
@@ -262,11 +270,13 @@ impl<const N: usize> ByteArrayTreeSet<N>{
 
     pub /*const*/ fn contains(&self, key: &[u8; N]) -> bool {self.0.contains(key)}
 
+    pub /*const*/ fn entries(&self, exclude: &Self) -> u64 {self.0.entries(exclude)}
+
     pub /*const*/ fn get_min_key(&self, exclude: &Self) -> Option<[u8; N]> {self.0.get_min_key(exclude)}
 
     pub /*const*/ fn get_max_key(&self, exclude: &Self) -> Option<[u8; N]> {self.0.get_max_key(exclude)}
 
-    pub /*const*/ fn max_depth(&self, exclude: &Self) -> u64 {self.0.max_depth(exclude)}
+    pub /*const*/ fn max_depth(&self) -> u64 {self.0.max_depth()}
 
     pub /*const*/ fn highest_shared_leading_zeroes_by_key(&self, key: &[u8; N], exclude: &Self) -> Option<[u8; N]>{
         self.0.highest_shared_leading_zeroes_by_key(key, exclude)

@@ -8,3 +8,11 @@ codegen-units = 1
 lto = "fat"
 panic = "abort"
 strip = "symbols"
+
+[[bench]]
+name = "benchmarks"  # <--- This MUST match your file name exactly (benchmarks.rs)
+harness = false      # <--- This is the crucial line you are missing!
+
+[dev-dependencies]
+rand = { version = "0.10.2", features = ["chacha"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
