@@ -51,7 +51,7 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub const fn new() -> Self {Self::Branch([const {None}; 2])}
 
-    /*const*/ pub fn is_empty(&self) -> bool{
+    pub /*const*/ fn is_empty(&self) -> bool{
         match self{
             Self::Branch(branch) => branch.iter().all(|x| x.is_none()),
             Self::Leaf(..) => false
