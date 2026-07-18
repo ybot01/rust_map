@@ -2,23 +2,9 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
-struct BranchIndex(bool);
-
-impl BranchIndex {
-    const fn new<const N: usize>(key: &[u8;N], depth: usize) -> Self {
-        //false = left, true = right
-        Self(((key[depth / 8] >> (7 - (depth % 8))) & 0b1) == 0)
-    }
-
-    fn as_index_u8(&self) -> u8 {
-        if !self.0 {0} else {1}
-    }
-
-    fn as_index_usize(&self) -> usize {
-        if !self.0 {0} else {1}
-    }
+const fn get_branch_index<const N: usize>(key: &[u8;N], depth: usize) -> usize {
+    ((key[depth / 8] >> (7 - (depth % 8))) & 0b1) as usize
 }
 
 /*const*/ fn subtract_arrays<const N: usize>(array_1: &[u8;N], array_2: &[u8;N]) -> [u8;N]{
@@ -57,30 +43,25 @@ impl BranchIndex {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ByteArrayTreeMap<const N: usize, V>{
-    Branch(Vec<(u8, ByteArrayTreeMap<N, V>)>),
+    Branch([Option<Box<Self>>; 2]),
     Leaf([u8;N], V)
 }
 
 impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
-    pub const fn new() -> Self {Self::Branch(Vec::new())}
+    pub const fn new() -> Self {Self::Branch([const {None}; 2])}
 
-    /*const*/ fn get_entry_at_branch_index(branch: &Vec<(u8, ByteArrayTreeMap<N, V>)>, branch_index: BranchIndex) -> Option<&ByteArrayTreeMap<N, V>> {
-        let branch_index_as_u8 = branch_index.as_index_u8();
-        branch.iter().find(|&&(i,_)| i == branch_index_as_u8).map(|(_,x)| x)
-    }
-
-    /*const*/ fn get_entry_at_branch_index_mut(branch: &mut Vec<(u8, ByteArrayTreeMap<N, V>)>, branch_index: BranchIndex) -> Option<&mut ByteArrayTreeMap<N, V>> {
-        let branch_index_as_u8 = branch_index.as_index_u8();
-        branch.iter_mut().find(|&&mut (i, _)| i == branch_index_as_u8).map(|(_,x)| x)
+    /*const*/ pub fn is_empty(&self) -> bool{
+        match self{
+            Self::Branch(branch) => branch.iter().all(|x| x.is_none()),
+            Self::Leaf(..) => false
+        }
     }
 
     /*const*/ fn _contains(&self, key: &[u8;N], depth: usize) -> bool{
         match self{
-            Self::Branch(branch) => {
-                Self::get_entry_at_branch_index(branch, BranchIndex::new(key, depth))
-                    .is_some_and(|found| found._contains(key, depth + 1))
-            },
+            Self::Branch(branch) => branch[get_branch_index(key, depth)].as_ref()
+                .is_some_and(|entry| entry._contains(key, depth + 1)),
             Self::Leaf(k,_) => k == key
         }
     }
@@ -89,7 +70,11 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn entries(&self, exclude: &ByteArrayTreeSet<N>) -> u64{
         match self{
-            Self::Branch(branch) => branch.iter().map(|(_,x)| x.entries(exclude)).sum(),
+            Self::Branch(branch) => branch.iter()
+                .map(|entry| entry.as_ref())
+                .filter_map(|entry| entry)
+                .map(|entry| entry.entries(exclude))
+                .sum(),
             Self::Leaf(..) => 1
         }
     }
@@ -97,15 +82,10 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
     pub /*const*/ fn get_min_key(&self, exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         match self{
             Self::Branch(branch) => {
-                for branch_index in 0..2{
-                    match Self::get_entry_at_branch_index(branch, branch_index)
-                        .and_then(|found| found.get_min_key(exclude))
-                    {
-                        Some(key) => return Some(key),
-                        None => ()
-                    }
-                }
-                None
+                branch.iter()
+                    .map(|entry| entry.as_ref())
+                    .filter_map(|entry| entry)
+                    .find_map(|entry| entry.get_min_key(exclude))
             },
             Self::Leaf(k, _) => if !exclude.contains(k) {Some(*k)} else {None}
         }
@@ -114,15 +94,10 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
     pub /*const*/ fn get_max_key(&self, exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         match self{
             Self::Branch(branch) => {
-                for branch_index in (0..2).rev(){
-                    match Self::get_entry_at_branch_index(branch, branch_index)
-                        .and_then(|found| found.get_max_key(exclude))
-                    {
-                        Some(key) => return Some(key),
-                        None => ()
-                    }
-                }
-                None
+                branch.iter().rev()
+                    .map(|x| x.as_ref())
+                    .filter_map(|entry| entry)
+                    .find_map(|entry| entry.get_max_key(exclude))
             },
             Self::Leaf(k, _) => if !exclude.contains(k) {Some(*k)} else {None}
         }
@@ -130,7 +105,12 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn max_depth(&self) -> u64 {
         match self{
-            Self::Branch(branch) => 1 + branch.iter().map(|(_,x)| x.max_depth()).max().unwrap_or(0),
+            Self::Branch(branch) => branch.iter()
+                .map(|entry| entry.as_ref())
+                .filter_map(|entry| entry)
+                .map(|x| x.max_depth())
+                .max()
+                .map_or(0, |x| x + 1),
             Self::Leaf(..) => 0
         }
     }
@@ -139,16 +119,12 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
         match self{
             Self::Branch(branch) => {
                 //const KEY_ORDER: [[usize; 4]; 4] = [[0,1,2,3], [1,0,2,3], [2,3,0,1], [3,2,0,1]];
-                const KEY_ORDER: [[u8; 2]; 2] = [[0,1], [1,0]];
-                for branch_index in KEY_ORDER[BranchIndex::new(key, depth).as_index_usize()]{
-                    match Self::get_entry_at_branch_index(branch, branch_index)
+                const BRANCH_INDEX_ORDER: [[usize; 2]; 2] = [[0,1], [1,0]];
+
+                BRANCH_INDEX_ORDER[get_branch_index(key, depth)].into_iter().find_map(|branch_index|
+                    branch[branch_index].as_ref()
                         .and_then(|found| found._highest_shared_leading_zeroes_by_key(key, exclude, depth + 1))
-                    {
-                        Some(key) => return Some(key),
-                        None => ()
-                    }
-                }
-                None
+                )
             }
             Self::Leaf(k, _) => if (k != key) && !exclude.contains(k) {Some(*k)} else {None}
         }
@@ -158,15 +134,16 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
         self._highest_shared_leading_zeroes_by_key(key, exclude, 0)
     }
 
-    /*
     /*const*/ fn _closest_by_abs_distance_by_key(&self, key: &[u8; N], exclude: &ByteArrayTreeSet<N>, depth: usize) -> (Option<([u8;N], [u8;N])>, bool, bool) {
         match self{
             Self::Branch(branch) => {
-                let index = get_branch_index(key, depth);
+                let branch_index = get_branch_index(key, depth);
 
-
-
-                let (mut closest, mut left, mut right) = branch[index]._closest_by_abs_distance_by_key(key, exclude, depth + 1);
+                let (mut closest, mut left, mut right) = branch[branch_index].as_ref()
+                    .map_or(
+                        (None, false, false),
+                        |found| found._closest_by_abs_distance_by_key(key, exclude, depth + 1)
+                    );
 
                 let mut insert_closest = |value|{
                     let abs_diff = get_abs_diff(&value, key);
@@ -174,8 +151,8 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
                 };
 
                 if !left{
-                    match if index == 0 {if depth == 0 /*must be smallest entry*/ {self.get_max_key(exclude)} else {None}}
-                    else {branch[1].get_max_key(exclude)}
+                    match if branch_index == 0 {if depth == 0 /*must be smallest entry*/ {self.get_max_key(exclude)} else {None}}
+                    else {branch[0].as_ref().and_then(|found| found.get_max_key(exclude))}
                     {
                         Some(value) => {
                             insert_closest(value);
@@ -186,8 +163,8 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
                 }
 
                 if !right{
-                    match if index == 1 {if depth == 0 /*must be largest entry*/ {self.get_min_key(exclude)} else {None}}
-                    else {branch[0].get_min_key(exclude)}
+                    match if branch_index == 1 {if depth == 0 /*must be largest entry*/ {self.get_min_key(exclude)} else {None}}
+                    else {branch[1].as_ref().and_then(|found| found.get_min_key(exclude))}
                     {
                         Some(value) => {
                             insert_closest(value);
@@ -200,7 +177,7 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
                 (closest, left, right)
             }
             Self::Leaf(k,_) => (
-                leaf.as_ref().filter(|(k,_)| (k != key) && !exclude.contains(k)).map(|(k,_)| (*k, get_abs_diff(k, key))),
+                if (k != key) && !exclude.contains(k) {Some((*k, get_abs_diff(k, key)))} else {None},
                 false,
                 false
             )
@@ -210,35 +187,67 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
     pub /*const*/ fn closest_by_abs_distance_by_key(&self, key: &[u8; N], exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         self._closest_by_abs_distance_by_key(key, exclude, 0).0.map(|(k,_)| k)
     }
-    */
+
 
     /*const*/ fn _get(&self, key: &[u8;N], depth: usize) -> Option<&V>{
         match self{
-            Self::Branch(branch) => {
-                Self::get_entry_at_branch_index(branch, get_branch_index(key, depth))
-                    .and_then(|found| found._get(key, depth + 1))
-            },
-            Self::Leaf(k, v) => if k == key {Some(v)} else {None}
+            Self::Branch(branch) => branch[get_branch_index(key, depth)].as_ref()
+                .and_then(|found| found._get(key, depth + 1)),
+            Self::Leaf(k,v) => if k == key {Some(v)} else {None}
         }
     }
 
     pub /*const*/ fn get(&self, key: &[u8; N]) -> Option<&V> {self._get(key, 0)}
 
     pub fn clear(&mut self) {*self = Self::new()}
-}
 
-//try to remove requirement for V to be clonable for insert and remove
+    fn _remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool, depth: usize) -> bool{
+        match self{
+            Self::Branch(branch) => {
+                let branch_index = get_branch_index(key, depth);
+                if !branch[branch_index].as_mut()
+                    .map_or(
+                        false,
+                        |found| found._remove_if(key, condition, depth + 1)
+                    )
+                {
+                    return false;
+                }
 
-impl<const N: usize, V: Clone> ByteArrayTreeMap<N, V>{
+                //check if current branch has empty branch inside, set these to none
+
+                if branch[branch_index].as_ref().is_some_and(|entry| entry.is_empty()){
+                    branch[branch_index] = None;
+                }
+
+                true
+            }
+            Self::Leaf(k, v) => {
+                if (k == key) && condition(v){
+                    *self = Self::new();
+                    true
+                }
+                else {false}
+            }
+        }
+    }
+
+    pub fn remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool) -> bool {
+        self._remove_if(key, condition, 0)
+    }
+
+    pub fn remove(&mut self, key: &[u8; N]) -> bool {
+        self.remove_if(key, &|_| true)
+    }
+
     fn _insert_or_update_if(&mut self, key: &[u8; N], value: V, condition: &impl Fn(&V) -> bool, depth: usize) -> bool {
         match self{
             Self::Branch(branch) => {
                 let branch_index = get_branch_index(key, depth);
-                match Self::get_entry_at_branch_index_mut(branch, branch_index){
+                match branch[branch_index].as_mut(){
                     Some(found) => found._insert_or_update_if(key, value, condition, depth + 1),
                     None => {
-                        if branch.len() == 0 {*self = Self::Leaf(*key, value)}
-                        else {branch.push((branch_index, Self::Leaf(*key, value)))}
+                        branch[branch_index] = Some(Box::new(Self::Leaf(*key, value)));
                         true
                     }
                 }
@@ -251,11 +260,12 @@ impl<const N: usize, V: Clone> ByteArrayTreeMap<N, V>{
                 }
                 else{
                     //insert
-                    *self = {
-                        let mut new_branch = Self::new();
-                        new_branch._insert_or_update_if(k, v.clone(), condition, depth);
-                        new_branch._insert_or_update_if(key, value, condition, depth);
-                        new_branch
+                    match core::mem::replace(self, Self::new()) {
+                        Self::Leaf(old_k, old_v) => {
+                            self._insert_or_update_if(&old_k, old_v, condition, depth);
+                            self._insert_or_update_if(key, value, condition, depth);
+                        }
+                        Self::Branch(_) => unreachable!()
                     }
                 }
                 true
@@ -269,59 +279,6 @@ impl<const N: usize, V: Clone> ByteArrayTreeMap<N, V>{
 
     pub fn insert(&mut self, key: &[u8; N], value: V) {
         _ = self.insert_or_update_if(key, value, &|_| true)
-    }
-
-    fn _remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool, depth: usize) -> bool{
-        match self{
-            Self::Branch(branch) => {
-                if !branch[get_branch_index(key, depth)]._remove_if(key, condition, depth + 1) {return false}
-                let mut trim = Some(false);
-                for entry in branch.iter(){
-                    match entry.as_ref(){
-                        Self::Leaf(None) => (),
-                        Self::Leaf(Some(_)) => trim = if trim == Some(false) {Some(true)} else {None},
-                        Self::Branch(_) => trim = None
-                    }
-                    if trim.is_none() {break}
-                }
-                match trim{
-                    Some(false) => *self = Self::new(),
-                    Some(true) => {
-                        for entry in branch.iter(){
-                            match entry.as_ref(){
-                                Self::Leaf(Some(leaf)) => {
-                                    *self = Self::Leaf(Some(leaf.clone()));
-                                    break;
-                                },
-                                _ => ()
-                            }
-                        }
-                    }
-                    None => ()
-                }
-                true
-            }
-            Self::Leaf(leaf) => {
-                match leaf{
-                    Some((k,v)) => {
-                        if (k == key) && condition(v){
-                            *leaf = None;
-                            true
-                        }
-                        else {false}
-                    }
-                    None => false
-                }
-            }
-        }
-    }
-
-    pub fn remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool) -> bool {
-        self._remove_if(key, condition, 0)
-    }
-
-    pub fn remove(&mut self, key: &[u8; N]) -> bool {
-        self.remove_if(key, &|_| true)
     }
 }
 

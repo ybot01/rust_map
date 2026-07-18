@@ -1,11 +1,11 @@
 use rust_map::{ByteArrayTreeMap, ByteArrayTreeSet};
 
-const fn get_new_map() -> ByteArrayTreeMap<32, u64> {ByteArrayTreeMap::new()}
+const fn get_new_map<const N: usize>() -> ByteArrayTreeMap<N, u64> {ByteArrayTreeMap::new()}
 
 #[test]
 fn test_new_map(){
-    let map = get_new_map();
-    assert_eq!(map, ByteArrayTreeMap::Leaf(None));
+    let map = get_new_map::<32>();
+    assert_eq!(map, ByteArrayTreeMap::Branch([const {None}; 2]));
 }
 
 #[test]
