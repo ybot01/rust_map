@@ -87,16 +87,18 @@ fn test_get_max_key(){
 #[test]
 fn test_max_depth(){
     let mut map = get_new_map();
-    assert_eq!(map.max_depth(), 0);
+    assert_eq!(map.max_depth(), 1);
     let mut array = [0;32];
     map.insert(&array, 0);
     array[array.len()-1] = 1;
     map.insert(&array, 0);
-    assert_eq!(map.max_depth(), 256);
+    assert_eq!(map.max_depth(), 257);
+    map.remove(&[0;32]);
+    assert_eq!(map.max_depth(), 1);
     map = get_new_map();
     map.insert(&[0;32], 0);
     map.insert(&[u8::MAX; 32], 0);
-    assert_eq!(map.max_depth(), 1);
+    assert_eq!(map.max_depth(), 2);
 }
 
 #[test]

@@ -37,5 +37,21 @@ fn benchmark_inserts(c: &mut Criterion) {
     });
 }
 
+fn benchmark_removes(c: &mut Criterion) {
+
+    let mut keys = Vec::new();
+    for _ in 0..100_000 {keys.push(get_random_bytes())}
+    let mut map = get_new_map();
+    for key in keys.iter() {map.insert(key, 0)}
+
+    c.bench_function("map_removes", |b| {
+        b.iter(|| {
+            for key in keys.iter() {
+                black_box(_ = map.remove(key));
+            }
+        })
+    });
+}
+
 criterion_group!(benches, benchmark_inserts);
 criterion_main!(benches);

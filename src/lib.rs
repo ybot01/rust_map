@@ -105,13 +105,13 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn max_depth(&self) -> u64 {
         match self{
-            Self::Branch(branch) => branch.iter()
+            Self::Branch(branch) => 1 + branch.iter()
                 .map(|entry| entry.as_ref())
                 .filter_map(|entry| entry)
                 .map(|x| x.max_depth())
                 .max()
-                .map_or(0, |x| x + 1),
-            Self::Leaf(..) => 0
+                .unwrap_or(0),
+            Self::Leaf(..) => 1
         }
     }
 
@@ -201,51 +201,12 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub fn clear(&mut self) {*self = Self::new()}
 
-    fn _remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool, depth: usize) -> bool{
-        match self{
-            Self::Branch(branch) => {
-                let branch_index = get_branch_index(key, depth);
-                if !branch[branch_index].as_mut()
-                    .map_or(
-                        false,
-                        |found| found._remove_if(key, condition, depth + 1)
-                    )
-                {
-                    return false;
-                }
-
-                //check if current branch has empty branch inside, set these to none
-
-                if branch[branch_index].as_ref().is_some_and(|entry| entry.is_empty()){
-                    branch[branch_index] = None;
-                }
-
-                true
-            }
-            Self::Leaf(k, v) => {
-                if (k == key) && condition(v){
-                    *self = Self::new();
-                    true
-                }
-                else {false}
-            }
-        }
-    }
-
-    pub fn remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool) -> bool {
-        self._remove_if(key, condition, 0)
-    }
-
-    pub fn remove(&mut self, key: &[u8; N]) -> bool {
-        self.remove_if(key, &|_| true)
-    }
-
-    fn _insert_or_update_if(&mut self, key: &[u8; N], value: V, condition: &impl Fn(&V) -> bool, depth: usize) -> bool {
+    fn _insert_or_update_if_mut(&mut self, key: &[u8; N], value: V, condition: &impl Fn(&mut V) -> bool, depth: usize) -> bool {
         match self{
             Self::Branch(branch) => {
                 let branch_index = get_branch_index(key, depth);
                 match branch[branch_index].as_mut(){
-                    Some(found) => found._insert_or_update_if(key, value, condition, depth + 1),
+                    Some(found) => found._insert_or_update_if_mut(key, value, condition, depth + 1),
                     None => {
                         branch[branch_index] = Some(Box::new(Self::Leaf(*key, value)));
                         true
@@ -262,8 +223,11 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
                     //insert
                     match core::mem::replace(self, Self::new()) {
                         Self::Leaf(old_k, old_v) => {
-                            self._insert_or_update_if(&old_k, old_v, condition, depth);
-                            self._insert_or_update_if(key, value, condition, depth);
+                            //passing condition doesnt matter here
+                            //there are no existing keys in self so inserting existing key will insert
+                            //then inserting new key we know is not same as existing key so will insert
+                            self._insert_or_update_if_mut(&old_k, old_v, condition, depth);
+                            self._insert_or_update_if_mut(key, value, condition, depth);
                         }
                         Self::Branch(_) => unreachable!()
                     }
@@ -274,11 +238,73 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
     }
 
     pub fn insert_or_update_if(&mut self, key: &[u8; N], value: V, condition: &impl Fn(&V) -> bool) -> bool {
-        self._insert_or_update_if(key, value, condition, 0)
+        self._insert_or_update_if_mut(key, value, &|v| condition(v), 0)
+    }
+
+    pub fn insert_or_update_if_mut(&mut self, key: &[u8; N], value: V, condition: &impl Fn(&mut V) -> bool) -> bool {
+        self._insert_or_update_if_mut(key, value, condition, 0)
     }
 
     pub fn insert(&mut self, key: &[u8; N], value: V) {
         _ = self.insert_or_update_if(key, value, &|_| true)
+    }
+
+    fn _remove_if_mut(&mut self, key: &[u8; N], condition: &impl Fn(&mut V) -> bool, depth: usize) -> bool{
+        match self{
+            Self::Branch(branch) => {
+                let branch_index = get_branch_index(key, depth);
+                if !branch[branch_index].as_mut()
+                    .map_or(
+                        false,
+                        |found| found._remove_if_mut(key, condition, depth + 1)
+                    )
+                {
+                    return false;
+                }
+
+                //check if current branch has empty branch inside, set these to none
+
+                if branch[branch_index].as_ref().is_some_and(|entry| entry.is_empty()) {branch[branch_index] = None}
+
+                let mut leaf_index = Some(None);
+
+                for i in 0..branch.len() {
+                    match branch[i].as_ref().map(|x| x.as_ref()){
+                        Some(Self::Branch(_)) => leaf_index = None, //exit, dont prune
+                        Some(Self::Leaf(..)) => leaf_index = if leaf_index == Some(None) {Some(Some(i))} else {None}, //if multiple leafs exit, dont prune
+                        None => ()
+                    }
+                    if leaf_index.is_none() {break}
+                }
+
+                //if branch contains only 1 leaf and 1 none entry then bring the leaf entry up a level
+                match leaf_index{
+                    Some(Some(index)) => *self = *branch[index].take().unwrap(),
+                    _ => ()
+                }
+
+                true
+            }
+            Self::Leaf(k, v) => {
+                if (k == key) && condition(v){
+                    *self = Self::new();
+                    true
+                }
+                else {false}
+            }
+        }
+    }
+
+    pub fn remove_if(&mut self, key: &[u8; N], condition: &impl Fn(&V) -> bool) -> bool {
+        self._remove_if_mut(key, &|v| condition(v), 0)
+    }
+
+    pub fn remove_if_mut(&mut self, key: &[u8; N], condition: &impl Fn(&mut V) -> bool) -> bool {
+        self._remove_if_mut(key, condition, 0)
+    }
+
+    pub fn remove(&mut self, key: &[u8; N]) -> bool {
+        self.remove_if(key, &|_| true)
     }
 }
 
@@ -286,6 +312,8 @@ pub struct ByteArrayTreeSet<const N: usize>(ByteArrayTreeMap<N, ()>);
 
 impl<const N: usize> ByteArrayTreeSet<N>{
     pub const fn new() -> Self {Self(ByteArrayTreeMap::new())}
+    
+    pub /*const*/ fn is_empty(&self) -> bool {self.0.is_empty()}
 
     pub /*const*/ fn contains(&self, key: &[u8; N]) -> bool {self.0.contains(key)}
 
