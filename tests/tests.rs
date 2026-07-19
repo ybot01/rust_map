@@ -15,7 +15,7 @@ fn test_insert(){
     map.insert(&[0;32], 0);
     map.insert(&[0;32], 1);
     map.insert(&[1;32], 1);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 2);
+    assert_eq!(map.entries(), 2);
 }
 
 #[test]
@@ -40,22 +40,22 @@ fn test_remove(){
     let mut map = get_new_map();
     map.insert(&[0;32], 0);
     map.insert(&[1;32], 1);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 2);
+    assert_eq!(map.entries(), 2);
     map.remove(&[0;32]);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    assert_eq!(map.entries(), 1);
     map.remove(&[1;32]);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+    assert_eq!(map.entries(), 0);
 }
 
 #[test]
 fn test_remove_if(){
     let mut map = get_new_map();
     map.insert(&[0;32], 0);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    assert_eq!(map.entries(), 1);
     map.remove_if(&[0;32], &|v| *v == 1);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    assert_eq!(map.entries(), 1);
     map.remove_if(&[0;32], &|v| *v == 0);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+    assert_eq!(map.entries(), 0);
 }
 
 #[test]
@@ -115,9 +115,9 @@ fn test_closest_by_abs_distance_by_key(){
 fn test_clear(){
     let mut map = get_new_map();
     map.insert(&[0;32], 0);
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 1);
+    assert_eq!(map.entries(), 1);
     map.clear();
-    assert_eq!(map.entries(&ByteArrayTreeSet::new()), 0);
+    assert_eq!(map.entries(), 0);
 }
 
 

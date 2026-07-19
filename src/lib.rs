@@ -53,7 +53,7 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn is_empty(&self) -> bool{
         match self{
-            Self::Branch(branch) => branch.iter().all(|x| x.is_none()),
+            Self::Branch(branch) => branch.iter().all(Option::is_none),
             Self::Leaf(..) => false
         }
     }
@@ -68,49 +68,30 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
 
     pub /*const*/ fn contains(&self, key: &[u8; N]) -> bool {self._contains(key, 0)}
 
-    pub /*const*/ fn entries(&self, exclude: &ByteArrayTreeSet<N>) -> u64{
+    pub /*const*/ fn entries(&self) -> u64{
         match self{
-            Self::Branch(branch) => branch.iter()
-                .map(|entry| entry.as_ref())
-                .filter_map(|entry| entry)
-                .map(|entry| entry.entries(exclude))
-                .sum(),
+            Self::Branch(branch) => branch.iter().flatten().map(|entry| entry.entries()).sum(),
             Self::Leaf(..) => 1
         }
     }
 
     pub /*const*/ fn get_min_key(&self, exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         match self{
-            Self::Branch(branch) => {
-                branch.iter()
-                    .map(|entry| entry.as_ref())
-                    .filter_map(|entry| entry)
-                    .find_map(|entry| entry.get_min_key(exclude))
-            },
+            Self::Branch(branch) => branch.iter().flatten().find_map(|entry| entry.get_min_key(exclude)),
             Self::Leaf(k, _) => if !exclude.contains(k) {Some(*k)} else {None}
         }
     }
 
     pub /*const*/ fn get_max_key(&self, exclude: &ByteArrayTreeSet<N>) -> Option<[u8; N]> {
         match self{
-            Self::Branch(branch) => {
-                branch.iter().rev()
-                    .map(|x| x.as_ref())
-                    .filter_map(|entry| entry)
-                    .find_map(|entry| entry.get_max_key(exclude))
-            },
+            Self::Branch(branch) => branch.iter().rev().flatten().find_map(|entry| entry.get_max_key(exclude)),
             Self::Leaf(k, _) => if !exclude.contains(k) {Some(*k)} else {None}
         }
     }
 
     pub /*const*/ fn max_depth(&self) -> u64 {
         match self{
-            Self::Branch(branch) => 1 + branch.iter()
-                .map(|entry| entry.as_ref())
-                .filter_map(|entry| entry)
-                .map(|x| x.max_depth())
-                .max()
-                .unwrap_or(0),
+            Self::Branch(branch) => 1 + branch.iter().flatten().map(|entry| entry.max_depth()).max().unwrap_or(0),
             Self::Leaf(..) => 1
         }
     }
@@ -223,7 +204,7 @@ impl<const N: usize, V> ByteArrayTreeMap<N, V>{
                     //insert
                     match core::mem::replace(self, Self::new()) {
                         Self::Leaf(old_k, old_v) => {
-                            //passing condition doesnt matter here
+                            //passing condition doesn't matter here
                             //there are no existing keys in self so inserting existing key will insert
                             //then inserting new key we know is not same as existing key so will insert
                             self._insert_or_update_if_mut(&old_k, old_v, condition, depth);
@@ -317,7 +298,7 @@ impl<const N: usize> ByteArrayTreeSet<N>{
 
     pub /*const*/ fn contains(&self, key: &[u8; N]) -> bool {self.0.contains(key)}
 
-    pub /*const*/ fn entries(&self, exclude: &Self) -> u64 {self.0.entries(exclude)}
+    pub /*const*/ fn entries(&self) -> u64 {self.0.entries()}
 
     pub /*const*/ fn get_min_key(&self, exclude: &Self) -> Option<[u8; N]> {self.0.get_min_key(exclude)}
 
@@ -333,9 +314,9 @@ impl<const N: usize> ByteArrayTreeSet<N>{
         self.0.closest_by_abs_distance_by_key(key, exclude)
     }
 
-    fn clear(&mut self) {self.0.clear()}
+    pub fn clear(&mut self) {self.0.clear()}
 
-    fn insert(&mut self, key: &[u8; N]) {self.0.insert(key, ())}
+    pub fn insert(&mut self, key: &[u8; N]) {self.0.insert(key, ())}
 
-    fn remove(&mut self, key: &[u8; N]) -> bool {self.0.remove(key)}
+    pub fn remove(&mut self, key: &[u8; N]) -> bool {self.0.remove(key)}
 }
